@@ -371,8 +371,21 @@ def _build_dynamic_interview_prompt(
         "Do not include any explanatory text outside of the JSON.\n\n"
         "Use the provided 'conversation_state.qa_list' to understand what has already been asked and "
         "how the candidate answered. Do not repeat questions that have already been asked, and avoid "
-        "rephrasing the same question multiple times. Limit follow-up questions on the same project or "
-        "topic to at most two before moving on to a new, distinct topic relevant to the candidate_profile.\n\n"
+        "rephrasing the same question multiple times.\n\n"
+        "FOLLOW-UP DECISION RULES:\n"
+        "- Treat each turn as a decision: either ask a focused follow-up about the same topic, or move on to a new topic.\n"
+        "- Ask a FOLLOW-UP when the latest answer is incomplete or high-level (e.g., missing key details, lacking concrete examples, "
+        "or not clearly addressing the original question).\n"
+        "- Typical follow-ups: ask for a specific example, clarify the candidate's role vs the team, dig into impact/metrics, or clarify trade-offs.\n"
+        "- Move on to a NEW topic when the latest answer is reasonably complete and specific, or when you have already asked two follow-ups "
+        "on the same project or topic.\n"
+        "- When you move on, change `next_round` to a new stage or skill area that has not been covered yet.\n\n"
+        "CONVERSATION QUALITY & USER TYPES:\n"
+        "- If the latest answer is unclear, contradictory, or off-topic, politely ask 1 short clarifying question instead of moving on.\n"
+        "- If the user seems confused about what you want, briefly restate what kind of answer you are looking for using simple language.\n"
+        "- For very talkative users, acknowledge what they shared and then gently refocus on a single, concrete follow-up.\n"
+        "- For edge cases (e.g., user refuses to answer, asks you questions, or gives obviously impossible info), respond calmly, "
+        "set expectations about what you can and cannot do, and then redirect to a relevant interview question.\n\n"
         "IMPORTANT STYLE RULES FOR QUESTIONS:\n"
         "- The interviewer persona will introduce themselves separately at the start of the interview.\n"
         "- Do NOT start questions with greetings like 'Hi', 'Hello', 'Hey', 'Good morning', etc.\n"
@@ -443,6 +456,9 @@ def _ask_interviewer_question(
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": json.dumps(user_payload)},
         ],
+        temperature=0.6,
+        top_p=0.9,
+        max_tokens=600,
         response_format={"type": "json_object"},
     )
     content = response.choices[0].message.content
@@ -485,6 +501,9 @@ def _analyze_with_coach(
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": json.dumps(user_payload)},
         ],
+        temperature=0.4,
+        top_p=0.9,
+        max_tokens=900,
         response_format={"type": "json_object"},
     )
     content = response.choices[0].message.content
