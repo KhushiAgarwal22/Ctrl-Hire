@@ -90,6 +90,39 @@ def _play_audio_file(filepath: Path) -> bool:
         return False
 
 
+def _speed_up_tts_audio_if_possible(src: Path, speed: float = 1.2) -> Path:
+    """
+    Use ffmpeg (if available) to slightly speed up the TTS audio for a more natural pace.
+    Returns the path to the (possibly) processed file.
+    """
+    if speed <= 1.0:
+        return src
+
+    # Reuse ffmpeg availability check used by Whisper
+    if not _check_ffmpeg_available():
+        return src
+
+    dst = src.with_name(src.stem + "_fast" + src.suffix)
+    try:
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(src),
+                "-filter:a",
+                f"atempo={speed}",
+                str(dst),
+            ],
+            check=True,
+            capture_output=True,
+        )
+        return dst
+    except Exception:
+        # If anything fails, fall back to the original audio
+        return src
+
+
 def _speak_text_google_tts(text: str, filename: Optional[Path] = None) -> None:
     """
     Use Google TTS (gTTS) to synthesize the interviewer question and play it.
@@ -106,11 +139,14 @@ def _speak_text_google_tts(text: str, filename: Optional[Path] = None) -> None:
         filename = tmp_dir / f"voice_interview_question_{ts}.mp3"
 
     try:
-        tts = gTTS(text=text, lang="en")
+        tts = gTTS(text=text, lang="en", slow=False)
         tts.save(str(filename))
 
+        # Optionally speed up playback slightly for a more conversational pace
+        processed = _speed_up_tts_audio_if_possible(filename, speed=1.2)
+
         # Try to play the audio
-        played = _play_audio_file(filename)
+        played = _play_audio_file(processed)
         if not played:
             print(f"[INFO] Audio file saved to {filename} (could not play automatically)")
 
@@ -301,9 +337,11 @@ def _get_openrouter_client() -> OpenAI:
             "OPENROUTER_API_KEY is not set. Please export it to use OpenRouter."
         )
     try:
+        # Increase timeout so lengthy LLM generations don't fail abruptly.
         client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
             api_key=api_key,
+            timeout=90,  # seconds
         )
         return client
     except Exception as e:
@@ -334,7 +372,16 @@ def _build_dynamic_interview_prompt(
         "Use the provided 'conversation_state.qa_list' to understand what has already been asked and "
         "how the candidate answered. Do not repeat questions that have already been asked, and avoid "
         "rephrasing the same question multiple times. Limit follow-up questions on the same project or "
-        "topic to at most two before moving on to a new, distinct topic relevant to the candidate_profile."
+        "topic to at most two before moving on to a new, distinct topic relevant to the candidate_profile.\n\n"
+        "IMPORTANT STYLE RULES FOR QUESTIONS:\n"
+        "- The interviewer persona will introduce themselves separately at the start of the interview.\n"
+        "- Do NOT start questions with greetings like 'Hi', 'Hello', 'Hey', 'Good morning', etc.\n"
+        "- Do NOT re-introduce yourself or restate your role/company once the persona has been shared.\n"
+        "- Do NOT mention that a question is an 'icebreaker', 'warm-up', or similar; simply ask it.\n"
+        "- Do NOT mention the round name (warmup, technical, etc.) or meta labels like 'first question' inside next_question.text; "
+        "that information belongs only in the 'next_round' field.\n"
+        "- Begin each question directly with the content of the question, as a normal interviewer would do after the initial greeting.\n"
+        "- Keep each question conversational and natural, avoiding long multi-part prompts; at most 1–2 closely related sub-questions."
     )
     return system_prompt
 

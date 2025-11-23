@@ -8,6 +8,8 @@ dependencies = [
     "crewai[litellm,tools]==1.4.1",
     "openai>=1.30.0",
     "gTTS>=2.5.0",
+    "streamlit>=1.40.0",
+    "streamlit-mic-recorder>=0.0.8",
     "sounddevice>=0.4.6",
     "soundfile>=0.12.1",
     "PyYAML>=6.0.1",
