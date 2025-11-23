@@ -1,310 +1,272 @@
+
 ## Ctrl+Hire – Voice Interview Practice System
-
-Ctrl+Hire is a **voice‑first interview practice app** where:
-
-- An **AI interviewer** speaks questions using Google TTS and adapts follow‑ups based on your answers.
-- You answer by **speaking in your browser** (or typing, if you prefer); responses are transcribed with local Whisper.
-- A **coach agent** analyzes the full session and gives structured, actionable feedback.
-
-Built with **CrewAI**, **LLaMA 3.1 8B via OpenRouter**, **Whisper**, **gTTS**, and a custom **Streamlit** frontend.
 
 ---
 
-## Table of Contents
+## About the Project
 
-- [Features](#features)
-- [Demo Scenarios & Evaluation](#demo-scenarios--evaluation)
-- [Architecture Overview](#architecture-overview)
-- [Agents & Prompt Design](#agents--prompt-design)
-- [Voice & Audio Pipeline](#voice--audio-pipeline)
-- [Frontend UX Flow](#frontend-ux-flow)
-- [Project Structure](#project-structure)
-- [Installation & Setup](#installation--setup)
-- [Running the Project](#running-the-project)
-- [Design Decisions](#design-decisions)
-- [Troubleshooting](#troubleshooting)
-- [Future Improvements](#future-improvements)
+Ctrl+Hire is a **voice‑first, JD‑aware interview practice studio** built for serious prep:
+
+- An **AI interviewer** speaks realistic questions, adapts follow‑ups, and can switch into **JD‑specific mode** to drill only the skills a role actually needs.
+- You answer mostly by **speaking in your browser**; local **Whisper** converts your speech to text and stores it as structured Q&A.
+- A separate **coach agent** reviews the full session and returns **scored, concrete feedback** plus improved sample answers for coding/SQL questions.
+
+The experience runs in a **Streamlit** web app backed by **CrewAI agents**, **LLaMA 3.1 8B via OpenRouter**, **gTTS**, and **local Whisper**.
+
+Unlike simple “single‑prompt” chatbots, Ctrl+Hire keeps a full **per‑user conversation state** (JSON on disk + Streamlit session state) and uses that to decide:
+
+- What stage of the interview you are in.
+- Whether to ask a follow‑up or move on to a new topic.
+- How the coach should weight each answer when scoring.
 
 ---
 
 ## Features
 
-- **Natural interviewer flow**
-  - Uses LLaMA 3.1 8B via OpenRouter.
-  - Avoids repeating questions or over‑explaining “round names”.
-  - Asks short, focused questions that build on your previous answers.
+- **Voice‑first interview experience**
+  - Interviewer introduces themselves and asks questions using **Google TTS**, with speed/pace tuned via `ffmpeg` for a natural feel.
+  - You answer by recording directly from the browser mic (`streamlit-mic-recorder`) or, as a fallback, by typing.
+  - Local **Whisper** (`openai-whisper`) handles speech‑to‑text; audio files are deleted after transcription.
 
-- **Voice‑first interaction**
-  - Questions are spoken via Google TTS (slightly sped up with ffmpeg for natural pacing).
-  - Answers are recorded through the browser mic or (in CLI mode) system mic.
-  - Local Whisper (`openai-whisper`) handles speech‑to‑text.
+- **JD‑specific and general interview modes**
+  - **General mode**: full structured interview (warmup, behavioral, role‑specific, culture, wrap‑up) with smart follow‑ups.
+  - **JD‑specific mode**: paste a job description and click **Start JD-specific interview** to get:
+    - 6–10 questions tightly anchored to the JD’s responsibilities, stack, and domain.
+    - Emphasis on **core skills** (languages, frameworks, OS, CN, DB, DSA, system design, analytics tools) and realistic scenarios.
+    - Minimal generic behavioral questions; situational prompts are specific to the JD’s environment.
+  - The interviewer prompt explicitly enforces that **at least ~70% of JD questions are technical / core‑skill focused**, with only very targeted situational prompts (e.g., debugging a production incident in that stack).
 
-- **Session tracking**
-  - Each interview run is stored as a **single JSON file** in `src/sessions/`.
-  - Contains:
-    - Candidate profile
-    - Ordered Q&A (`qa_list`)
-    - Final coach feedback
-  - Audio is **not** stored long‑term; only text lives in the sessions.
+- **Coding / SQL workspaces with function stubs**
+  - For DSA / algorithm / SQL questions, the interviewer includes a **Python function or query stub** in the question.
+  - The Streamlit app auto‑extracts that stub and pre‑fills a **code editor text area**, so you only complete the body (LeetCode‑style).
+  - A dedicated **technical evaluator** LLM call scores correctness and gives a short verdict just for that problem.
+  - The technical evaluator does **not** replace the coach; instead, it attaches a compact JSON object to that Q&A entry, which the coach later uses when building the final report.
 
-- **Coach feedback dashboard**
-  - Overall narrative summary.
-  - Numeric scores (1–5) for:
-    - Communication
-    - STAR structure
-    - Role knowledge
-    - Confidence
-  - Bullet‑point strengths & improvement areas.
-  - Optional per‑round notes (warmup, behavioral, role‑specific, etc.).
+- **Structured coaching and error explanation**
+  - The coach agent produces:
+    - Overall summary and 1–5 scores for communication, structure (STAR), role knowledge, and confidence.
+    - Strengths, improvement areas, and round‑by‑round notes.
+    - For coding/SQL answers: a short explanation of **what went wrong**, plus a corrected snippet in `sample_improved_answers`.
+  - Role‑specific feedback highlights how you performed on **technical questions**, not just general soft skills.
+  - The coach is instructed to **never invent questions or answers**; everything it says must be grounded in actual entries from `qa_list`, which makes reports trustworthy for post‑analysis.
 
-- **Modern Streamlit UI**
-  - Hero landing section with branding and description.
-  - Main‑page profile form (no cluttered sidebar inputs).
-  - Interviewer view with a **bot avatar** and spoken questions.
-  - Simple answer section: **speak or type, then automatically advance**.
+- **Session logging & JSON schema design**
+  - Every session is saved as **one JSON file per user run** under `src/sessions/`:
+    - Candidate profile, including optional `job_description`.
+    - Ordered `qa_list` with question text, answer text, and optional `technical_evaluation` blocks.
+    - Final `coach_feedback` object.
+  - Audio is never stored; only **text Q&A + feedback** are persisted.
+  - The schemas are designed so that you can later feed the same JSON into:
+    - Analytics dashboards (e.g., to plot score trends over time).
+    - A recruitment or LMS system.
+    - A fine‑tuning or RAG pipeline, if you want to build your own models on top of this data.
 
----
-
-## Demo Scenarios & Evaluation
-
-The system is tuned and documented against the following evaluation criteria:
-
-### Conversational Quality
-
-- **Confused User** (unsure what they want)
-  - If the latest answer is unclear, contradictory, or off‑topic, the interviewer:
-    - Asks **one short clarifying question**,
-    - Briefly restates what type of answer they’re looking for in simple language.
-
-- **Efficient User** (wants quick results)
-  - Questions are:
-    - Short and to the point.
-    - Strictly free of repeated greetings and intros.
-    - Limited to 1–2 sub‑questions per turn.
-
-- **Chatty User** (goes off topic)
-  - The interviewer acknowledges long answers, then:
-    - Politely refocuses on a **single concrete follow‑up**,
-    - Avoids getting lost in too many branches.
-
-- **Edge Case User**
-  - For users who:
-    - Refuse to answer,
-    - Ask the AI questions instead,
-    - Provide obviously impossible information,
-  - The interviewer:
-    - Responds calmly,
-    - Sets expectations about what it can / cannot do,
-    - Redirects back to a meaningful interview question.
-
-### Agentic Behaviour & Adaptability
-
-- Uses `conversation_state.qa_list` and `latest_answer` to:
-  - Decide whether to clarify, follow up, or move to a new topic.
-  - Avoid asking the same question multiple times.
-- The coach agent:
-  - **Only** comments on questions and answers actually present in `qa_list`.
-  - Clearly states when feedback is based on a short or incomplete interview.
+- **Modern, Gen‑Z‑friendly UI**
+  - Gradient hero card with Ctrl+Hire branding and a short, punchy description.
+  - Main‑page profile form (name is mandatory), with **separate buttons** for general vs JD‑specific interviews.
+  - Interview tab with:
+    - Bot avatar, spoken questions, and clean text display.
+    - Auto‑advance after voice answers; minimal buttons and zero backend debug noise.
+  - Coach and Session Log tabs for feedback review and quick Q&A inspection.
+  - The frontend hides internal metadata like “round names”, raw JSON, or transcription logs so that it feels like a **real interview tool**, not an AI playground.
 
 ---
 
-## Architecture Overview
+## Usage in Real Life
 
-At a high level, Ctrl+Hire consists of:
+- **SDE / SWE prep**
+  - Practice behavioral + system design + DSA/algorithms, with **code‑stub questions** that resemble LeetCode and GfG.
+  - Use JD‑specific mode to tune questions to **backend**, **full‑stack**, or **data‑heavy** roles.
+   - Example: paste a JD for a backend SDE at a fintech; the interviewer focuses on REST APIs, database transactions, caching, and concurrency.
 
-- **Frontend**: `streamlit_app.py`
-  - Handles UI, browser microphone, and interaction flow.
-- **Core logic / CLI**: `main.py`
-  - Implements the voice interview loop and session JSON logging.
-- **Agents & orchestration**: `crew.py` + `config/`
-  - Defines interviewer and coach agents, tasks, and JSON schemas.
-- **Persistence**: `src/sessions/`
-  - Stores one JSON per interview session.
+- **Data / Analytics roles**
+  - Get SQL questions that require writing precise queries over realistic table schemas.
+  - Coach explains query issues and suggests a corrected, optimized version.
+   - Example: a JD mentioning “Snowflake, dashboards, cohort analysis” leads to questions about window functions, aggregations, and defining metrics.
 
-The LLM stack runs via **OpenRouter** using the `openai` Python client, so switching models is as simple as changing the model name in `main.py` / `crew.py`.
+- **Project‑based storytelling**
+  - When you talk about projects, the coach infers **technical strengths** (e.g., “Strong in Kafka streaming and low‑latency APIs”).  
 
----
-
-## Agents & Prompt Design
-
-### Dynamic Interview Conductor
-
-- Role: conversational interviewer.
-- Model: `meta-llama/llama-3.1-8b-instruct`.
-- Key prompt constraints (in `_build_dynamic_interview_prompt`):
-
-  - Use `conversation_state.qa_list` to understand history.
-  - Do **not** repeat previously asked questions.
-  - For follow‑ups:
-    - At most two on the same project/topic, then move on.
-  - **Conversation quality rules**:
-    - For unclear/off‑topic answers, ask one clarifying question.
-    - For confused users, restate expectations simply.
-    - For chatty users, acknowledge then narrow down.
-    - For edge cases, respond calmly, set expectations, and redirect.
-  - **Style rules**:
-    - No “Hi/Hello/Hey/Good morning” at the start of questions.
-    - No re‑introducing the persona or company after the first intro.
-    - No explicit “this is a warmup/ice‑breaker/first question” phrases.
-    - Round names belong only in `next_round`, not in the spoken question.
-
-- Decoding:
-  - `temperature=0.6`, `top_p=0.9`, `max_tokens=600` for natural but focused replies.
-
-### Interview Performance Coach
-
-- Role: performance coach summarizing and scoring your interview.
-- Model: same LLaMA 3.1 8B via OpenRouter.
-- Prompt (in `_build_coach_prompt`) instructs the agent to:
-  - Ground **all** statements strictly in the provided `qa_list`.
-  - Avoid inventing questions, rounds, or detailed answers that never occurred.
-  - Be explicit when the evaluation is based on very few questions.
-
-- Output schema: defined in `config/analyze_interview_performance.json`, including:
-  - `overall_summary`
-  - `dimension_scores`
-  - `strengths`
-  - `improvement_areas`
-  - Optional: `per_round_feedback`, `sample_improved_answers`
-
-- Decoding:
-  - `temperature=0.4`, `top_p=0.9`, `max_tokens=900` for stable, structured feedback.
+- **Self‑review before interviews**
+  - Run one or two mock sessions right before a real interview to surface weak answers.
+  - Export or copy key feedback sections as notes for last‑minute revision.
+   - Over multiple sessions, you can compare JSONs or scores to see which dimensions (e.g., communication vs depth) are improving.
 
 ---
 
-## Voice & Audio Pipeline
+## Tech Stack
 
-1. **Text‑to‑Speech (Questions & Intro)**
-   - Implemented via `gTTS`:
-     - `slow=False` for natural speed.
-   - Post‑processed with `ffmpeg` when available:
-     - Uses `atempo=1.2` to make the voice slightly faster/more conversational.
-   - In the CLI mode, audio is played using:
-     - `playsound` (if available) or OS‑level commands (`os.startfile`, etc.).
-   - In Streamlit, the audio is:
-     - Converted to MP3 bytes and played with a hidden `<audio autoplay>` element.
+- **Frontend**
+  - `Streamlit` for the multi‑page web app.
+  - `streamlit-mic-recorder` for in‑browser mic capture.
 
-2. **Speech‑to‑Text (User Answers)**
-   - Local **Whisper** (`openai-whisper`) with ffmpeg.
-   - In Streamlit:
-     - Browser mic → `streamlit-mic-recorder` → temporary WAV file → Whisper → text.
-   - In CLI:
-     - `sounddevice` records directly to WAV → Whisper → text.
-   - Audio files are deleted immediately after transcription; only text goes into the JSON.
+- **LLMs & Agents**
+  - `openai` Python client with **OpenRouter** and the model `meta-llama/llama-3.1-8b-instruct`.
+  - `CrewAI` for defining agents and tasks.
+  - All LLM calls use the **OpenAI‑compatible** Chat Completions API, so you can swap in another provider by changing the `base_url` and `model` name.
 
----
+- **Audio**
+  - `gTTS` for text‑to‑speech.
+  - `openai-whisper` for local speech‑to‑text.
+  - `ffmpeg` for audio speed adjustment.
 
-## Frontend UX Flow
-
-### Landing & Profile
-
-- Hero section:
-  - Brand: **Ctrl+Hire**.
-  - Tagline: calm, voice‑first interview rehearsal with structured feedback.
-- Profile form:
-  - Name, target role, experience level, company type.
-  - Feedback style: **coaching** or **strict**.
-- Button: **Start / reset interview** creates a new JSON session and resets state.
-
-### Interviewer Section
-
-1. **Consent**
-   - If you haven’t started yet:
-     - Message: “Your interviewer is ready. When you're comfortable, click the button below to begin.”
-     - Button: **I’m ready to start the interview**.
-   - Between rounds:
-     - Message: “When you're ready for the next question, click the button below.”
-     - Button: **I’m ready for the next question**.
-
-2. **Question Presentation**
-   - On the very first question:
-     - Plays a combined clip: short intro + first question.
-   - Later questions:
-     - Plays the next question only.
-   - The UI shows:
-     - Bot avatar (medium icon) above the text.
-     - `Question: <question text>` below the avatar.
-
-### Your Answer Section
-
-- Browser mic recorder:
-  - Start → speak → stop.
-  - On stop:
-    - Audio is transcribed with Whisper.
-    - If successful:
-      - Answer is saved to `qa_list`.
-      - Phase is updated (`await_next` or `finished`).
-      - `st.rerun()` is called so the next‑step UI appears immediately.
-- Typed answer (optional):
-  - Fallback if transcription fails or you prefer typing.
-  - Button: **Submit typed answer**.
-
-### Coach Feedback Section
-
-- Button: **Analyze interview with coach**.
-- On click:
-  - Calls coach agent with full `qa_list`.
-  - Renders:
-
-    - **Overall summary** – multi‑paragraph overview.
-    - **Scores (1–5)** – metric tiles for each dimension.
-    - **Strengths** – bullet list.
-    - **Improvement areas** – bullet list.
-    - **Round‑by‑round notes** – headings per round with short paragraphs.
+- **Backend / Utilities**
+  - Python 3.11, `python-dotenv`, `PyYAML`, `sounddevice` (CLI only), and standard libraries.
+  - Tests (if you re‑add them) can be run with `pytest` and are written to exercise both CLI and Streamlit helper logic.
 
 ---
 
-## Project Structure
+## Architecture (Including AI Agents)
+
+- **Streamlit Frontend (`streamlit_app.py`)**
+  - Renders landing page, profile form, navigation tabs, and microphone / code editor UI.
+  - Calls into `main.py` helpers for interviewer, coach, transcription, and evaluation.
+
+- **Core Orchestration (`main.py`)**
+  - Builds system prompts (`_build_dynamic_interview_prompt`, `_build_coach_prompt`).
+  - Handles JSON session creation, `qa_list` updates, and coach feedback storage.
+  - Manages TTS, Whisper transcription, and OpenRouter client setup.
+  - Provides a CLI entrypoint (`run()`) so you can run a full voice interview in the terminal without Streamlit.
+
+- **CrewAI Agents (`crew.py` + `config/`)**
+  - **Dynamic Interview Conductor**
+    - Goal: run a human‑like interview that adapts to answers and avoids repetition.
+    - Uses `conduct_dynamic_interview_session` task description + JSON schema.
+    - Has logic for warmup vs technical vs culture rounds, and a special **JD‑focused mode** that ignores generic rounds.
+     - Prompt rules cover:
+       - How many follow‑ups to ask on the same topic (usually at most two).
+       - How to behave with confused, chatty, or edge‑case users.
+       - How to embed **code stubs** into technical questions so the UI can show a ready‑to‑edit function signature.
+  - **Interview Performance Coach**
+    - Goal: evaluate the finished interview and give grounded, structured feedback.
+    - Uses `analyze_interview_performance` task description + JSON schema.
+    - Produces scores, strengths, improvement areas, inferred technical skills, and improved answers.
+     - Explicitly instructed to:
+       - Only comment on questions actually present in `qa_list`.
+       - Call out specific problems in technical answers (wrong complexity, missing edge cases, incorrect joins, etc.).
+       - Provide a clear “what to do differently next time” section instead of generic platitudes.
+
+- **Inline Technical Evaluator (`_evaluate_technical_answer`)**
+  - A dedicated LLaMA call that grades **one coding/SQL answer** with:
+    - `is_correct`, `score_0_to_1`, `short_verdict`.
+    - `detailed_feedback` and `ideal_answer_outline`.
+  - Stored per‑question inside `qa_list` for later coach analysis.
+
+- **Persistence Layer (`src/sessions/`)**
+  - Flat JSON files; no database required.
+  - Designed so you can later import into analytics tools or dashboards.
+
+---
+
+## System Design
+
+- **Flow**
+  1. User configures profile and (optionally) pastes a JD on the **Home** page.
+  2. Starting an interview creates a **new session JSON** and redirects to the **Interview** tab.
+  3. For each turn:
+     - Frontend calls `_ask_interviewer_question` → LLaMA returns persona + `next_question` JSON.
+     - TTS plays the question; UI shows the bot face and text.
+     - User responds via mic or code editor; Whisper or text area captures the answer.
+     - `_append_qa_to_session` writes the Q&A into the JSON file and updates `conversation_state`.
+  4. When the interviewer sets `end_interview=true`, phase flips to `finished`.
+  5. On the **Coach** tab, `_analyze_with_coach` is called with full `qa_list` to generate feedback.
+
+- **Key Design Choices**
+  - Stateless LLM calls; **session state is owned by JSON + `st.session_state`**.
+  - All AI outputs are constrained by JSON schemas to keep the UI robust.
+  - Audio is ephemeral; only text is persisted to make storage and privacy simpler.
+  - The system is intentionally **single‑user / single‑session** by default, but the file‑based design makes it easy to:
+    - Mount the app behind authentication and map sessions to real users.
+    - Sync JSONs to cloud storage or a database for team analytics.
+
+---
+
+## Images
+
+Add your own screenshots under an `images/` folder, then reference them here, for example:
+
+- **Home / Landing**
+  - `images/ctrlhire_home.png` – Ctrl+Hire hero section and profile form.
+- **JD‑specific Setup**
+  - `images/ctrlhire_jd_mode.png` – JD text area and JD‑specific start button.
+- **Interview Screen**
+  - `images/ctrlhire_interview.png` – bot avatar, spoken question, and answer section.
+- **Coach Feedback**
+  - `images/ctrlhire_coach.png` – overall summary, scores, and strengths/improvements.
+
+---
+
+## Workflow Images
+
+You can also include simple diagrams (drawn in Excalidraw, Whimsical, etc.) and export them as PNG/SVG:
+
+- `images/ctrlhire_architecture.png` – high‑level architecture (frontend ↔ core ↔ LLMs ↔ storage).
+- `images/ctrlhire_interview_flow.png` – step‑by‑step interview turn loop.
+- `images/ctrlhire_coach_flow.png` – coach evaluation pipeline from `qa_list` to feedback.
+
+Reference them in docs, slides, or a portfolio case study.
+
+---
+
+## File Structure
 
 ```text
 voice_interview_practice_system_v1_crewai-project/
   pyproject.toml
   README.md
-  run_interview.ps1
+  run_interview.ps1 / run_interview.bat
   src/
     sessions/
-      <user>_<timestamp>.json        # one file per interview
+      <user>_<timestamp>.json          # one file per interview
     voice_interview_practice_system/
       __init__.py
-      main.py                        # CLI and core logic
-      streamlit_app.py               # Streamlit web UI
-      crew.py                        # CrewAI agents & tasks
+      main.py                          # core logic, TTS/STT, LLM prompts, JSON sessions
+      streamlit_app.py                 # Streamlit web UI and interaction flow
+      crew.py                          # CrewAI agents and tasks
       config/
         agents.yaml
         tasks.yaml
         conduct_dynamic_interview_session.json
         analyze_interview_performance.json
-      tools/
-        custom_tool.py
+      tools/                           # (optional) custom tools for crews
 ```
 
 ---
 
-## Installation & Setup
+## Complete Setup Guide
 
-### 1. Requirements
+### 1. Prerequisites
 
-- Python **3.11.x** (recommended).
-- `ffmpeg` installed and on your `PATH`.
-- `OPENROUTER_API_KEY` (from `https://openrouter.ai/keys`).
+- **Python**: 3.11.x (recommended).
+- **ffmpeg** installed and on your `PATH` (required by Whisper and audio utilities).
+- **OpenRouter account** and `OPENROUTER_API_KEY` from `https://openrouter.ai/keys`.
 
-### 2. Virtual environment
+### 2. Clone and create a virtual environment
 
 ```powershell
-cd path\to\voice_interview_practice_system_v1_crewai-project
+cd path\to\
+git clone https://github.com/<your-username>/voice_interview_practice_system_v1_crewai-project.git
+cd voice_interview_practice_system_v1_crewai-project
 
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 
+On macOS / Linux:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
 ### 3. Install dependencies
 
-```powershell
+```bash
 python -m pip install --upgrade pip
 python -m pip install -e .
 ```
 
-### 4. Environment variables
+### 4. Configure environment variables
 
 Create a `.env` file in the project root:
 
@@ -312,34 +274,28 @@ Create a `.env` file in the project root:
 OPENROUTER_API_KEY=your_openrouter_api_key_here
 ```
 
-Or set it in PowerShell for the current session:
+Or set it per‑session (PowerShell example):
 
 ```powershell
 $env:OPENROUTER_API_KEY = "your_openrouter_api_key_here"
 ```
 
----
-
-## Running the Project
-
-### Streamlit Web App (recommended)
+### 5. Run the Streamlit web app (recommended)
 
 ```powershell
-.\.venv\Scripts\Activate.ps1
+.\.venv\Scripts\Activate.ps1   # or source .venv/bin/activate on macOS/Linux
 streamlit run src/voice_interview_practice_system/streamlit_app.py
 ```
 
-Then in your browser:
+In your browser:
 
-1. Fill the profile form and click **Start / reset interview**.
-2. In **Interviewer**, click **I’m ready to start the interview**.
-3. Listen to the question and answer by:
-   - Recording with the mic (preferred), or
-   - Typing and submitting an answer.
-4. Repeat for multiple questions.
-5. Click **Analyze interview with coach** to see the feedback dashboard.
+1. On **Home**, enter your name, role, experience level, and company type.
+2. Optionally paste a **job description** and click **Start JD-specific interview**, or click **Start general interview**.
+3. On the **Interview** tab, let the interviewer speak the question and respond using the mic or (for coding) via the code editor.
+4. After a few questions, open the **Coach** tab and click **Analyze interview with coach**.
+5. Use the **Session log** tab to quickly inspect the questions asked in the current session.
 
-### CLI Voice Interview
+### 6. Optional: CLI voice interview
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
@@ -347,44 +303,8 @@ $env:PYTHONPATH = "src"
 python -m voice_interview_practice_system.main run
 ```
 
-This runs a full voice interview in the terminal, using system audio and mic.
+This runs a pure terminal‑based voice interview using system audio and microphone, writing JSON sessions the same way as the web app.
 
 ---
 
-## Design Decisions
-
-- **Text‑only sessions**: To protect privacy and reduce storage, only text (questions, answers, feedback) is persisted; raw audio is temporary.
-- **Local Whisper**: Eliminates dependency on external STT APIs and keeps audio on your machine.
-- **Strict output schemas**: Both interviewer and coach responses are constrained by JSON schemas, making it easier to render, test, and extend.
-- **Prompt‑level handling of different user types**: The interviewer is explicitly instructed how to respond to confused, efficient, chatty, and edge‑case users.
-- **UI minimalism**: The user sees only what a real candidate would see:
-  - Persona text, question, answer tools, and feedback—no debug information like round codes, raw JSON, or transcription logs.
-
----
-
-## Troubleshooting
-
-- **`APITimeoutError: Request timed out`**
-  - OpenRouter may be slow or your network unstable.
-  - The OpenRouter client uses a **90‑second timeout**; if issues persist, retry or switch networks.
-- **`ffmpeg` errors or “file not found”**
-  - Ensure `ffmpeg` is installed and on `PATH`:
-    - Windows: `winget install ffmpeg` then restart the terminal.
-- **No audio transcribed from mic**
-  - Check your browser permissions for microphone access.
-  - If transcription is empty, the UI prompts you to type an answer instead.
-
----
-
-## Future Improvements
-
-- Let users pick interviewer persona / difficulty level from the UI.
-- Session history page with multiple past interviews and trend graphs.
-- Export coach feedback as a PDF or shareable link.
-- Support multiple languages for both TTS and Whisper.
-
----
-
-Ctrl+Hire is designed to feel like a real conversation with a thoughtful interviewer and coach, not just a set of prompts. Use it to rehearse, reflect, and iteratively improve your interview performance.
-
-
+Ctrl+Hire is built to feel like a real conversation with a thoughtful interviewer and coach, while still giving you structured data and feedback you can learn from or plug into your own analytics. Use it as a personal mock interview studio or as a building block for a larger assessment platform.

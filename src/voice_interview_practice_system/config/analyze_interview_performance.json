@@ -103,6 +103,13 @@
         ],
         "additionalProperties": true
       }
+    },
+    "inferred_technical_skills": {
+      "description": "List of concrete technical skills, tools, or domains that the coach can confidently infer from the candidate's project-based answers (e.g., React, Kubernetes, ETL pipelines, advanced SQL, distributed systems). Each item must be grounded in at least one actual answer.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     }
   },
   "required": [

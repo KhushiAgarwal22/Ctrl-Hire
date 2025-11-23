@@ -1,25 +1,12 @@
 ---
 conduct_dynamic_interview_session:
-  description: "Execute a structured interview conversation with the candidate by:\n\n1.
-    **Setting Persona** (first call only): Establish a realistic interviewer persona
-    based on candidate profile: \"I'm a [Senior Level] [Role] at a [company_type]
-    interviewing you for a [target_role] position.\"\n\n2. **Following Interview Structure**:
-    Progress through rounds systematically:\n   - Warmup & Background (1-2 questions)\n
-    \  - Behavioral (2-3 questions using STAR methodology) \n   - Role-Specific (3-4
-    questions based on {target_role})\n   - Culture Fit & Motivation (1-2 questions)\n
-    \  - Curveballs & Situational (1 question)\n   - Wrap-up (1 question)\n\n3. **Dynamic
-    Question Management**: For each turn:\n   - Analyze the candidate's latest answer\n
-    \  - Decide: follow-up for depth OR move to next question/round\n   - Ask ONE
-    question at a time with natural language\n   - Request specifics, metrics, and
-    concrete examples\n\n4. **Role-Specific Question Adaptation**:\n   - SDE: Technical
-    (DSA, system design, debugging), CS fundamentals\n   - Data Analyst: SQL, metrics,
-    data analysis, dashboards\n   - Product Manager: Product sense, prioritization,
-    stakeholder management\n   - Sales: Prospecting, objection handling, closing,
-    KPIs\n   - Retail: Customer service, conflict resolution, policies\n\n5. **Interview
-    Termination**: Signal end when you've covered all rounds adequately (typically
-    7-10 total questions)\n\nInput format: JSON with candidate_profile, conversation_state,
-    and latest_answer\nOutput format: JSON with persona, next_round, next_question
-    (with type, skill_tags, text), and end_interview flag"
+  description: "Execute a structured interview conversation with the candidate.\n\n**JD-FOCUSED
+    MODE (when candidate_profile.job_description is non-empty):**\n- Ignore the usual warmup / behavioral / culture-fit round structure.\n- Ask 6-10 questions that are tightly focused on the responsibilities, must-have skills, tools, and domains described in the job description.\n- Make the majority of questions about core skills and technical depth that the role actually uses day to day (programming languages, frameworks, operating systems, networks, databases, data structures & algorithms, system design, analytics tools, platforms, and domain knowledge mentioned in the JD).\n- Prefer concrete \"how would you implement / design / debug / write a query for X\" style questions over storytelling or generic behavioral prompts.\n- Situational questions should be very specific to the job's context (for example, production incidents, scale bottlenecks, data quality issues described or implied by the JD), not generic \"tell me about a challenge\" style prompts.\n- You may still ask about past projects or behavioral examples, but only when they directly relate to key JD themes and are used to probe those core skills.\n- Do NOT spend time on generic icebreakers, broad project walkthroughs, or unrelated culture questions; stay anchored to the JD.\n\n**GENERAL
+    MODE (when no job_description is provided):**\n1. **Setting Persona** (first call only): Establish a realistic interviewer persona based on candidate profile: \"I'm a [Senior Level] [Role] at a [company_type] interviewing you for a [target_role] position.\"\n\n2.
+    **Following Interview Structure**: Progress through rounds systematically:\n   - Warmup & Background (1-2 questions)\n   - Behavioral (2-3 questions using STAR methodology)\n   - Role-Specific (3-4 questions based on {target_role})\n   - Culture Fit & Motivation (1-2 questions)\n   - Curveballs & Situational (1 question)\n   - Wrap-up (1 question)\n\n3.
+    **Dynamic Question Management**: For each turn:\n   - Analyze the candidate's latest answer\n   - Decide: follow-up for depth OR move to next question/round\n   - Ask ONE question at a time with natural language\n   - Request specifics, metrics, and concrete examples\n\n4.
+    **Role-Specific Question Adaptation**:\n   - SDE: Technical (DSA, system design, debugging), CS fundamentals. Include 2-3 coding questions that explicitly require the candidate to describe or write code for algorithms or data structures. Prefer well-known, standard problems that are commonly seen on public platforms such as GeeksforGeeks or LeetCode, and if you refer to them by name, keep the statement faithful to the original.\n   - Data Analyst: SQL, metrics, data analysis, dashboards. Include 2-3 questions that require the candidate to write SQL queries over realistic tables (these can also be inspired by standard problems from public learning platforms).\n   - Product Manager: Product sense, prioritization, stakeholder management\n   - Sales: Prospecting, objection handling, closing, KPIs\n   - Retail: Customer service, conflict resolution, policies\n\n5. **Interview
+    Termination**: Signal end when you've covered all rounds adequately (typically 7-10 total questions)\n\nInput format: JSON with candidate_profile, conversation_state, and latest_answer\nOutput format: JSON with persona, next_round, next_question (with type, skill_tags, text), and end_interview flag"
   expected_output: "A structured JSON response containing:\n- persona: Realistic interviewer
     identity (first call only)\n- next_round: Current interview stage \n- next_question:
     Object with question_type, skill_tags array, and natural text\n- end_interview:
@@ -54,9 +41,13 @@ analyze_interview_performance:
 
     6. **Sample Improved Answers**: For 2-3 weaker responses, provide:
        - Original answer summary
-       - Improved version with better structure/detail/depth
+       - Improved version with better structure/detail/depth. For coding / SQL questions, this improved version should clearly explain the main mistake(s) in the candidate's solution and include a corrected code/query snippet (or a very clear pseudo-code version) that would be considered a strong answer.
 
-    7. **Mode Adaptation**:
+    7. **Inferred Technical Skills from Projects**:
+       - From project-based and role-specific answers, infer the key technical skills, tools, frameworks, or domains the candidate appears strong in.
+       - Only include skills that are clearly evidenced by at least one concrete example in qa_list (e.g., \"Designed and implemented a Kafka-based event pipeline\" → Kafka, streaming systems).
+
+    8. **Mode Adaptation**:
        - Strict mode: Direct, concise feedback
        - Coaching mode: Detailed, encouraging, growth-focused guidance
 
@@ -70,6 +61,7 @@ analyze_interview_performance:
     - improvement_areas: Array of actionable development recommendations
     - per_round_feedback: Object with commentary for each interview stage
     - sample_improved_answers: Array of original vs. improved response examples
+    - inferred_technical_skills: Array of concrete technical skills / tools / domains inferred from project-based answers
 
     All feedback should be specific, evidence-based from actual responses, and calibrated to the candidate's experience level and target role.
   agent: interview_performance_coach

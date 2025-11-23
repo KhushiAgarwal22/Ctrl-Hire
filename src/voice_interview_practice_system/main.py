@@ -394,7 +394,34 @@ def _build_dynamic_interview_prompt(
         "- Do NOT mention the round name (warmup, technical, etc.) or meta labels like 'first question' inside next_question.text; "
         "that information belongs only in the 'next_round' field.\n"
         "- Begin each question directly with the content of the question, as a normal interviewer would do after the initial greeting.\n"
-        "- Keep each question conversational and natural, avoiding long multi-part prompts; at most 1–2 closely related sub-questions."
+        "- Keep each question conversational and natural, avoiding long multi-part prompts; at most 1–2 closely related sub-questions.\n"
+        "- Whenever reasonable, weave in the candidate's past answers or profile so it feels personal (e.g., 'Earlier you mentioned...', "
+        "'In your last project at a startup...', 'Given your experience as a mid-level SDE...').\n"
+        "- Vary the phrasing and structure of your questions so they do NOT all sound like a template; use natural human language.\n\n"
+        "JOB DESCRIPTION MODE (IF job_description IS PROVIDED):\n"
+        "- The candidate_profile may include a free-text 'job_description' field containing the actual JD for this interview.\n"
+        "- If job_description is non-empty, you are in JD-focused mode. In this mode, you should:\n"
+        "  - Ignore the usual warmup/behavioral/culture-fit round structure described above.\n"
+        "  - Ask 6–10 questions that are tightly focused on the responsibilities, must-have skills, tools, and domains described in the JD.\n"
+        "  - Make the majority of questions (at least 70%) about core skills and technical depth required by the JD: programming languages, frameworks, libraries, operating systems, computer networks, databases, data structures & algorithms, system-design concepts, data skills, tools, platforms, and domain knowledge that appear in the JD.\n"
+        "  - You may still ask about past projects or behavioral examples, but only when they directly relate to key JD themes and help you assess those core skills (e.g., 'Tell me about a time you used Kafka to...').\n"
+        "  - Situational / scenario questions are allowed only when they are very specific to the job's actual responsibilities (e.g., \"how would you debug X in a distributed system like ours\"), not generic \"tell me about a challenge\" prompts.\n"
+        "  - Do NOT spend time on generic project walkthroughs or broad behavioral questions (\"tell me about yourself\", generic STAR stories, culture-only topics); stay anchored to the JD and the day-to-day work.\n"
+        "- If job_description is empty or missing, follow the normal structured interview flow described earlier.\n\n"
+        "WHEN ASKING DSA / CODING QUESTIONS:\n"
+        "- Prefer classic, well-known interview problems that are widely available on public learning platforms such as GeeksforGeeks or LeetCode.\n"
+        "- If you reference a specific named problem, keep the wording and constraints close to the standard version so the candidate can recognize it.\n"
+        "- Do NOT invent obscure or highly idiosyncratic problems; choose problems that a typical SDE candidate might reasonably have seen while preparing.\n"
+        "- Ensure each coding question is clearly specified, with inputs, outputs, and any important constraints (e.g., time/space expectations).\n"
+        "- For each coding question, include a short Python function stub that the candidate can complete, similar to platforms like LeetCode.\n"
+        "  - The stub should be shown in a fenced code block using Markdown, for example:\n"
+        "    ```python\n"
+        "    def two_sum(nums: list[int], target: int) -> list[int]:\n"
+        "        # TODO: implement\n"
+        "        pass\n"
+        "    ```\n"
+        "  - Keep the stub minimal: just the function signature, type hints if helpful, and a TODO/pass inside.\n"
+        "  - Phrase the question so it is clear that the candidate should fill in the body of this function."
     )
     return system_prompt
 
@@ -427,7 +454,25 @@ def _build_coach_prompt(
         "do NOT describe performance on other hypothetical questions.\n"
         "- The per_round_feedback object MUST only include keys for rounds that actually appear in qa_list "
         "(based on each entry's 'round' field). Do not add feedback for rounds that never occurred.\n"
-        "- If qa_list is short, it is better to say that the evaluation is limited than to imagine missing parts."
+        "- If qa_list is short, it is better to say that the evaluation is limited than to imagine missing parts.\n\n"
+        "USING TECHNICAL EVALUATIONS (IF PRESENT):\n"
+        "- Some qa_list entries may contain a 'technical_evaluation' object produced by an automated checker for coding/SQL answers.\n"
+        "- You may use this information to better understand which parts of a solution were incorrect or incomplete, but you must still align your feedback with the actual answer_text so everything remains grounded.\n\n"
+        "INFERRING TECHNICAL STRENGTHS FROM PROJECTS:\n"
+        "- Carefully read all answers that describe concrete projects, systems, dashboards, pipelines, or products the candidate has worked on.\n"
+        "- From those project-based answers, infer the specific technical skills, tools, frameworks, or domains the candidate appears strong in "
+        "(for example: React, Redux, Kubernetes, distributed systems, advanced SQL, ETL pipelines, experimentation, etc.).\n"
+        "- Only include a skill in inferred_technical_skills if it is clearly supported by at least one concrete example in qa_list. "
+        "Do NOT guess skills that are not explicitly or implicitly evidenced.\n"
+        "- Keep each inferred skill short and concrete (1-4 words per item), and limit the list to the 5–10 strongest signals.\n\n"
+        "IMPROVED ANSWERS FOR CODING / SQL QUESTIONS:\n"
+        "- When constructing sample_improved_answers for coding or SQL questions, first summarize what went wrong in the candidate's original approach (logic bug, missing edge case, wrong join, etc.).\n"
+        "- Then provide a concise corrected solution in the improved_answer field: either real code (Python/SQL) or very clear pseudo-code.\n"
+        "- The corrected snippet should be self-contained and directly answer the interview question, with any important edge cases or constraints handled.\n\n"
+        "ROLE-SPECIFIC FEEDBACK FOR CODING / SQL QUESTIONS:\n"
+        "- In the per_round_feedback.role_specific field, clearly explain how the candidate performed on coding and SQL questions.\n"
+        "- When an answer was incorrect or incomplete, explicitly name the main problem (for example: wrong loop bounds, not handling empty input, incorrect join condition, missing GROUP BY columns, etc.).\n"
+        "- Briefly describe the correct high-level approach, and (when relevant) mention that a corrected code/query snippet is provided in sample_improved_answers so the candidate can see what a strong solution looks like."
     )
     return system_prompt
 
@@ -511,6 +556,66 @@ def _analyze_with_coach(
         return json.loads(content)
     except json.JSONDecodeError:
         return {"raw_feedback": content}
+
+
+def _evaluate_technical_answer(
+    client: OpenAI,
+    system_prompt_role: str,
+    model: str,
+    candidate_profile: Dict[str, Any],
+    question_text: str,
+    answer_text: str,
+    question_type: str,
+    skill_tags: List[str],
+) -> Dict[str, Any]:
+    """
+    Use the LLM to quickly evaluate a single technical answer (coding / SQL, etc.).
+    Returns a small JSON object with a verdict, brief feedback, and an ideal outline.
+    """
+    system_prompt = (
+        "You are a senior technical interviewer evaluating ONE answer from a candidate.\n"
+        f"Context role: {system_prompt_role}.\n\n"
+        "You must respond as a strict JSON object with the following keys:\n"
+        "- is_correct: boolean\n"
+        "- score_0_to_1: number between 0 and 1 indicating approximate correctness\n"
+        "- short_verdict: one short sentence summarizing how good the answer is\n"
+        "- detailed_feedback: 1-2 short paragraphs with specific improvement suggestions\n"
+        "- ideal_answer_outline: bullet-style outline (as a single string) of what a strong answer should cover\n\n"
+        "If the question is about algorithms / data structures / coding, focus on correctness, complexity and edge cases.\n"
+        "If the question is about SQL or analytics, focus on joins, filters, aggregation correctness and performance.\n"
+        "If the candidate answer is empty or says they don't know, mark is_correct=false and give a concise ideal_answer_outline."
+    )
+
+    user_payload = {
+        "candidate_profile": candidate_profile,
+        "question_text": question_text,
+        "answer_text": answer_text,
+        "question_type": question_type,
+        "skill_tags": skill_tags,
+    }
+
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": json.dumps(user_payload)},
+            ],
+            temperature=0.3,
+            top_p=0.9,
+            max_tokens=500,
+            response_format={"type": "json_object"},
+        )
+        content = response.choices[0].message.content
+        return json.loads(content)
+    except Exception as e:
+        return {
+            "is_correct": False,
+            "score_0_to_1": 0.0,
+            "short_verdict": "Could not run automated evaluation.",
+            "detailed_feedback": f"Internal error while evaluating answer: {e}",
+            "ideal_answer_outline": "",
+        }
 
 
 def _start_voice_interview_session() -> None:
@@ -630,12 +735,34 @@ def _start_voice_interview_session() -> None:
         latest_answer_text = answer_text
 
         # Only store text in the session JSON (no audio file paths)
-        qa_entry = {
+        qa_entry: Dict[str, Any] = {
             "turn": turn_index,
             "round": next_round,
             "question": question_text,
             "answer_text": answer_text,
         }
+
+        # For technical questions (DSA, SQL, etc.), run an automatic correctness check.
+        skill_tags = next_question_obj.get("skill_tags", []) or []
+        question_type = str(next_question_obj.get("question_type", "") or "").lower()
+        technical_tags = {tag.lower() for tag in skill_tags}
+        is_technical = any(
+            tag in technical_tags for tag in ["dsa", "coding", "algorithm", "sql", "sql_query", "query"]
+        ) or question_type in {"technical", "coding", "dsa", "sql"}
+
+        if is_technical and answer_text.strip():
+            tech_role_hint = f"{candidate_profile.get('target_role','')} @ {candidate_profile.get('company_type','')}"
+            tech_eval = _evaluate_technical_answer(
+                client=openrouter_client,
+                system_prompt_role=tech_role_hint,
+                model=chat_model,
+                candidate_profile=candidate_profile,
+                question_text=question_text,
+                answer_text=answer_text,
+                question_type=question_type,
+                skill_tags=skill_tags,
+            )
+            qa_entry["technical_evaluation"] = tech_eval
         session_data["qa_list"].append(qa_entry)
         conversation_state["qa_list"] = session_data["qa_list"]
 
