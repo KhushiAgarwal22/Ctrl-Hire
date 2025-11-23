@@ -16,6 +16,7 @@ from gtts import gTTS
 from openai import OpenAI
 import whisper
 import yaml
+import time
 
 # Optional playsound support: if available, used for in-process audio playback.
 try:  # pragma: no cover - playsound is optional and may not be installed
@@ -99,17 +100,20 @@ def _speak_text_google_tts(text: str, filename: Optional[Path] = None) -> None:
     # Use a temp directory so question audio is not persisted in sessions
     if filename is None:
         tmp_dir = Path(tempfile.gettempdir())
-        filename = tmp_dir / "voice_interview_last_question.mp3"
+        # Use a unique file per call to avoid "Permission denied" if a previous
+        # player still has the file open.
+        ts = int(time.time() * 1000)
+        filename = tmp_dir / f"voice_interview_question_{ts}.mp3"
 
     try:
         tts = gTTS(text=text, lang="en")
         tts.save(str(filename))
-        
+
         # Try to play the audio
         played = _play_audio_file(filename)
         if not played:
             print(f"[INFO] Audio file saved to {filename} (could not play automatically)")
-        
+
         # Always print the text as well
         print(f"[TEXT] {text}")
     except Exception as e:
@@ -258,7 +262,13 @@ def _transcribe_with_whisper(audio_path: Path) -> str:
         
         model = _get_whisper_model()
         # Use absolute path as string for Whisper
-        result = model.transcribe(str(audio_path_abs))
+        try:
+            result = model.transcribe(str(audio_path_abs))
+        except KeyboardInterrupt:
+            # Gracefully handle user cancelling a long transcription
+            print("\n[INFO] Transcription cancelled by user (Ctrl+C).")
+            return ""
+
         text = (result.get("text") or "").strip()
         print(f"\n[Transcription] {text}\n")
         return text
@@ -489,7 +499,6 @@ def _start_voice_interview_session() -> None:
     interviewer_persona: Optional[str] = None
 
     print(f"\nSession JSON will be saved to: {session_path}\n")
-
     turn_index = 0
     while True:
         turn_index += 1
@@ -510,6 +519,16 @@ def _start_voice_interview_session() -> None:
             session_data["interviewer_persona"] = persona
             print(f"\n[Interviewer Persona] {persona}\n")
 
+            # Let the interviewer introduce itself using its persona, via voice.
+            intro_voice = (
+                f"Hello {user_name or 'there'}. "
+                f"My name is {persona}. "
+                f"I will be your interviewer for the {target_role or 'selected'} role. "
+                "I will ask you questions and listen to your answers. "
+                "Let us begin."
+            )
+            _speak_text_google_tts(intro_voice)
+
         next_round = question_struct.get("next_round", "unknown")
         next_question_obj = question_struct.get("next_question", {}) or {}
         question_text = next_question_obj.get("text", "Please answer this question.")
@@ -528,6 +547,10 @@ def _start_voice_interview_session() -> None:
         try:
             if recorded:
                 answer_text = _transcribe_with_whisper(audio_filename)
+                # If Whisper did not return anything (or was cancelled), fall back to manual input
+                if not answer_text.strip():
+                    print("[INFO] No transcription captured. You can type your answer instead.")
+                    answer_text = input("Please type your answer (fallback): ").strip()
             else:
                 answer_text = input("Please type your answer (fallback): ").strip()
         finally:
