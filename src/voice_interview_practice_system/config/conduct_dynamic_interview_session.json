@@ -1,0 +1,44 @@
+{
+  "title": "ConductDynamicInterviewSessionResponse",
+  "type": "object",
+  "properties": {
+    "persona": {
+      "description": "Realistic interviewer identity (first call only)",
+      "type": ["string", "null"]
+    },
+    "next_round": {
+      "description": "Current interview stage (e.g., warmup, behavioral, role-specific, culture, curveball, wrap-up)",
+      "type": "string"
+    },
+    "next_question": {
+      "type": "object",
+      "properties": {
+        "question_type": {
+          "description": "Category of the question (e.g., warmup, behavioral, technical, culture)",
+          "type": "string"
+        },
+        "skill_tags": {
+          "description": "List of skills this question is targeting",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "text": {
+          "description": "The natural language text of the question to ask the candidate",
+          "type": "string"
+        }
+      },
+      "required": ["text"],
+      "additionalProperties": true
+    },
+    "end_interview": {
+      "description": "Boolean flag to indicate if the interview should be terminated after this question",
+      "type": "boolean"
+    }
+  },
+  "required": ["next_round", "next_question", "end_interview"],
+  "additionalProperties": true
+}
+
+

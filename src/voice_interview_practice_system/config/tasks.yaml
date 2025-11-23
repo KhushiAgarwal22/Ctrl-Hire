@@ -1,0 +1,77 @@
+---
+conduct_dynamic_interview_session:
+  description: "Execute a structured interview conversation with the candidate by:\n\n1.
+    **Setting Persona** (first call only): Establish a realistic interviewer persona
+    based on candidate profile: \"I'm a [Senior Level] [Role] at a [company_type]
+    interviewing you for a [target_role] position.\"\n\n2. **Following Interview Structure**:
+    Progress through rounds systematically:\n   - Warmup & Background (1-2 questions)\n
+    \  - Behavioral (2-3 questions using STAR methodology) \n   - Role-Specific (3-4
+    questions based on {target_role})\n   - Culture Fit & Motivation (1-2 questions)\n
+    \  - Curveballs & Situational (1 question)\n   - Wrap-up (1 question)\n\n3. **Dynamic
+    Question Management**: For each turn:\n   - Analyze the candidate's latest answer\n
+    \  - Decide: follow-up for depth OR move to next question/round\n   - Ask ONE
+    question at a time with natural language\n   - Request specifics, metrics, and
+    concrete examples\n\n4. **Role-Specific Question Adaptation**:\n   - SDE: Technical
+    (DSA, system design, debugging), CS fundamentals\n   - Data Analyst: SQL, metrics,
+    data analysis, dashboards\n   - Product Manager: Product sense, prioritization,
+    stakeholder management\n   - Sales: Prospecting, objection handling, closing,
+    KPIs\n   - Retail: Customer service, conflict resolution, policies\n\n5. **Interview
+    Termination**: Signal end when you've covered all rounds adequately (typically
+    7-10 total questions)\n\nInput format: JSON with candidate_profile, conversation_state,
+    and latest_answer\nOutput format: JSON with persona, next_round, next_question
+    (with type, skill_tags, text), and end_interview flag"
+  expected_output: "A structured JSON response containing:\n- persona: Realistic interviewer
+    identity (first call only)\n- next_round: Current interview stage \n- next_question:
+    Object with question_type, skill_tags array, and natural text\n- end_interview:
+    Boolean flag to terminate session\n\nThe question text should be conversational,
+    specific, and designed to elicit detailed responses with concrete examples and
+    metrics. Follow-ups should probe for missing STAR elements or seek clarification
+    on vague answers."
+  agent: dynamic_interview_conductor
+analyze_interview_performance:
+  description: |-
+    Conduct comprehensive evaluation of the completed interview session by analyzing all question-answer pairs to generate detailed performance feedback:
+
+    1. **Overall Assessment**: Provide 1-3 paragraph summary of candidate's overall performance relative to their {target_role} and {experience_level}
+
+    2. **Dimensional Scoring** (1-5 scale):
+       - Communication: Clarity, conciseness, articulation
+       - Structure (STAR): Use of Situation-Task-Action-Result framework for behavioral answers
+       - Role Knowledge: Domain-specific technical or functional expertise
+       - Confidence & Tone: Ownership, decisiveness, professional demeanor
+
+    3. **Strengths Identification**: Extract 3-5 specific positive observations based on actual candidate responses
+
+    4. **Improvement Areas**: Identify 3-5 concrete, actionable development opportunities with specific recommendations
+
+    5. **Per-Round Feedback**: Analyze performance in each interview stage:
+       - Warmup: Background presentation and clarity
+       - Behavioral: STAR structure and example quality
+       - Role-Specific: Technical/functional depth appropriate to level
+       - Culture: Motivation and company fit signals
+       - Curveball: Handling of ambiguous/challenging situations
+       - Wrap-up: Quality of questions asked and professional closure
+
+    6. **Sample Improved Answers**: For 2-3 weaker responses, provide:
+       - Original answer summary
+       - Improved version with better structure/detail/depth
+
+    7. **Mode Adaptation**:
+       - Strict mode: Direct, concise feedback
+       - Coaching mode: Detailed, encouraging, growth-focused guidance
+
+    Input: Candidate profile and complete qa_list from interview session
+    Output: Structured JSON feedback object with scores, commentary, and improvement suggestions
+  expected_output: |-
+    A comprehensive JSON feedback object containing:
+    - overall_summary: Multi-paragraph performance assessment
+    - dimension_scores: Numerical ratings (1-5) for communication, STAR structure, role knowledge, confidence
+    - strengths: Array of specific positive observations
+    - improvement_areas: Array of actionable development recommendations
+    - per_round_feedback: Object with commentary for each interview stage
+    - sample_improved_answers: Array of original vs. improved response examples
+
+    All feedback should be specific, evidence-based from actual responses, and calibrated to the candidate's experience level and target role.
+  agent: interview_performance_coach
+  context:
+  - conduct_dynamic_interview_session

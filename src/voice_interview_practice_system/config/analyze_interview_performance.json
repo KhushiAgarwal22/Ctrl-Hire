@@ -1,0 +1,117 @@
+{
+  "title": "AnalyzeInterviewPerformanceResponse",
+  "type": "object",
+  "properties": {
+    "overall_summary": {
+      "description": "Multi-paragraph performance assessment summarizing the candidate's interview",
+      "type": "string"
+    },
+    "dimension_scores": {
+      "description": "Numerical ratings (1-5) across multiple performance dimensions",
+      "type": "object",
+      "properties": {
+        "communication": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "star_structure": {
+          "description": "Use of Situation-Task-Action-Result framework for behavioral answers",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "role_knowledge": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "confidence": {
+          "description": "Confidence and tone",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        }
+      },
+      "required": [
+        "communication",
+        "star_structure",
+        "role_knowledge",
+        "confidence"
+      ],
+      "additionalProperties": false
+    },
+    "strengths": {
+      "description": "Specific positive observations based on actual candidate responses",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "improvement_areas": {
+      "description": "Concrete, actionable development recommendations",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "per_round_feedback": {
+      "description": "Feedback for each interview stage",
+      "type": "object",
+      "properties": {
+        "warmup": {
+          "type": "string"
+        },
+        "behavioral": {
+          "type": "string"
+        },
+        "role_specific": {
+          "type": "string"
+        },
+        "culture": {
+          "type": "string"
+        },
+        "curveball": {
+          "type": "string"
+        },
+        "wrap_up": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "sample_improved_answers": {
+      "description": "Original vs improved answers for weaker responses",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "question": {
+            "type": "string"
+          },
+          "original_answer_summary": {
+            "type": "string"
+          },
+          "improved_answer": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "question",
+          "original_answer_summary",
+          "improved_answer"
+        ],
+        "additionalProperties": true
+      }
+    }
+  },
+  "required": [
+    "overall_summary",
+    "dimension_scores",
+    "strengths",
+    "improvement_areas"
+  ],
+  "additionalProperties": true
+}
+
+
