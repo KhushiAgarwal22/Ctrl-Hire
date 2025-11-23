@@ -450,15 +450,26 @@ def main() -> None:
             question_type = str(next_q_meta.get("question_type", "") or "").lower()
             skill_tags = next_q_meta.get("skill_tags", []) or []
             technical_tags = {tag.lower() for tag in skill_tags}
-            is_coding = any(
-                tag in technical_tags for tag in ["dsa", "coding", "algorithm", "sql", "sql_query", "query"]
-            ) or question_type in {"technical", "coding", "dsa", "sql"}
+            # Also treat questions as coding when they include an explicit code stub
+            # so that the user only sees a code editor instead of voice / generic text inputs.
+            question_text = st.session_state.current_question_text or ""
+            starter_snippet_from_text = _extract_first_code_block(question_text)
+            has_code_stub = bool(starter_snippet_from_text)
+            is_coding = (
+                any(
+                    tag in technical_tags
+                    for tag in ["dsa", "coding", "algorithm", "sql", "sql_query", "query"]
+                )
+                or question_type in {"technical", "coding", "dsa", "sql"}
+                or has_code_stub
+            )
 
             if is_coding:
                 # Show a simple "code space" only for coding questions
                 st.subheader("Your Answer (code)")
                 code_key = f"code_answer_{len(st.session_state.session_data.get('qa_list', [])) + 1}"
-                starter_snippet = _extract_first_code_block(st.session_state.current_question_text or "")
+                # Reuse any detected stub so general coding questions show only a code editor.
+                starter_snippet = starter_snippet_from_text
                 code_text = st.text_area(
                     "Write your solution here (complete the function stub shown in the question)",
                     value=starter_snippet,
@@ -594,7 +605,10 @@ def main() -> None:
             st.success("Coach feedback generated.")
 
             # Pretty presentation instead of raw JSON
-            overall = feedback.get("overall_summary", "").strip()
+            # Prefer a structured overall summary, but fall back to any raw text
+            overall = (feedback.get("overall_summary") or "").strip()
+            if not overall:
+                overall = (feedback.get("raw_feedback") or "").strip()
             scores = feedback.get("dimension_scores", {}) or {}
             strengths = feedback.get("strengths", []) or []
             improvements = feedback.get("improvement_areas", []) or []
@@ -675,7 +689,7 @@ def main() -> None:
         if "coach_feedback" in st.session_state.session_data:
             st.markdown("### Last coach feedback (summary key)")
             fb = st.session_state.session_data["coach_feedback"]
-            overall = (fb.get("overall_summary") or "").strip()
+            overall = (fb.get("overall_summary") or fb.get("raw_feedback") or "").strip()
             if overall:
                 st.write(overall)
         return
