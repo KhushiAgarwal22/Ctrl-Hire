@@ -116,7 +116,7 @@ Unlike simple “single‑prompt” chatbots, Ctrl+Hire keeps a full **per‑use
 
 ---
 
-## Architecture (Including AI Agents)
+## Architecture
 
 - **Streamlit Frontend (`streamlit_app.py`)**
   - Renders landing page, profile form, navigation tabs, and microphone / code editor UI.
@@ -128,7 +128,7 @@ Unlike simple “single‑prompt” chatbots, Ctrl+Hire keeps a full **per‑use
   - Manages TTS, Whisper transcription, and OpenRouter client setup.
   - Provides a CLI entrypoint (`run()`) so you can run a full voice interview in the terminal without Streamlit.
 
-- **CrewAI Agents (`crew.py` + `config/`)**
+- **CrewAI Agents 
   - **Dynamic Interview Conductor**
     - Goal: run a human‑like interview that adapts to answers and avoids repetition.
     - Uses `conduct_dynamic_interview_session` task description + JSON schema.
@@ -146,13 +146,13 @@ Unlike simple “single‑prompt” chatbots, Ctrl+Hire keeps a full **per‑use
        - Call out specific problems in technical answers (wrong complexity, missing edge cases, incorrect joins, etc.).
        - Provide a clear “what to do differently next time” section instead of generic platitudes.
 
-- **Inline Technical Evaluator (`_evaluate_technical_answer`)**
+- **Inline Technical Evaluator 
   - A dedicated LLaMA call that grades **one coding/SQL answer** with:
     - `is_correct`, `score_0_to_1`, `short_verdict`.
     - `detailed_feedback` and `ideal_answer_outline`.
   - Stored per‑question inside `qa_list` for later coach analysis.
 
-- **Persistence Layer (`src/sessions/`)**
+- **Persistence Layer 
   - Flat JSON files; no database required.
   - Designed so you can later import into analytics tools or dashboards.
 
@@ -182,29 +182,13 @@ Unlike simple “single‑prompt” chatbots, Ctrl+Hire keeps a full **per‑use
 ---
 
 ## Images
+<img width="1919" height="793" alt="image" src="https://github.com/user-attachments/assets/fe2d4948-1488-460e-8d37-781ad075453c" />
+<img width="1919" height="785" alt="image" src="https://github.com/user-attachments/assets/fc37429a-1c63-4e91-8f9b-1b1d2b87a138" />
+<img width="1911" height="608" alt="image" src="https://github.com/user-attachments/assets/9cbbc6ca-61b0-4869-8d76-bae0ae003a5c" />
+<img width="1892" height="873" alt="image" src="https://github.com/user-attachments/assets/dca1481d-d699-4b82-9257-9c9ecfc8ae6a" />
 
-Add your own screenshots under an `images/` folder, then reference them here, for example:
 
-- **Home / Landing**
-  - `images/ctrlhire_home.png` – Ctrl+Hire hero section and profile form.
-- **JD‑specific Setup**
-  - `images/ctrlhire_jd_mode.png` – JD text area and JD‑specific start button.
-- **Interview Screen**
-  - `images/ctrlhire_interview.png` – bot avatar, spoken question, and answer section.
-- **Coach Feedback**
-  - `images/ctrlhire_coach.png` – overall summary, scores, and strengths/improvements.
 
----
-
-## Workflow Images
-
-You can also include simple diagrams (drawn in Excalidraw, Whimsical, etc.) and export them as PNG/SVG:
-
-- `images/ctrlhire_architecture.png` – high‑level architecture (frontend ↔ core ↔ LLMs ↔ storage).
-- `images/ctrlhire_interview_flow.png` – step‑by‑step interview turn loop.
-- `images/ctrlhire_coach_flow.png` – coach evaluation pipeline from `qa_list` to feedback.
-
-Reference them in docs, slides, or a portfolio case study.
 
 ---
 
