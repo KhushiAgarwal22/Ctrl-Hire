@@ -1,6 +1,14 @@
-# VoiceInterviewPracticeSystem Crew
+# Ctrl-Hire - Voice Interview Practice System
 
-Welcome to the VoiceInterviewPracticeSystem Crew project, powered by [crewAI](https://crewai.com). This template is designed to help you set up a multi-agent AI system with ease, leveraging the powerful and flexible framework provided by crewAI. Our goal is to enable your agents to collaborate effectively on complex tasks, maximizing their collective intelligence and capabilities.
+Welcome to Ctrl-Hire, an AI-powered voice interview practice system powered by [crewAI](https://crewai.com). This system helps you practice interviews with realistic AI agents that conduct dynamic interviews and provide personalized feedback.
+
+## Features
+
+- **Voice-Based Interaction**: Questions are spoken using Google TTS and displayed as text
+- **Speech-to-Text**: Record your answers using Whisper (local transcription)
+- **Dynamic Interview Flow**: AI interviewer adapts questions based on your responses
+- **Personalized Feedback**: Coach agent analyzes your performance and provides detailed feedback
+- **Session Tracking**: All Q&A sessions are saved in JSON format for review
 
 ## Installation
 
@@ -64,7 +72,7 @@ sudo apt install ffmpeg
 
 This project requires **one API key** to function:
 
-1. **OPENROUTER_API_KEY** - Used for Llama 3.2 3B Instruct (interviewer & coach agents)
+1. **OPENROUTER_API_KEY** - Used for Llama 3.1 8B Instruct (interviewer & coach agents)
    - Get your key from: https://openrouter.ai/keys
    - **Note:** Whisper runs locally (no API key needed)
 
@@ -94,32 +102,66 @@ setx OPENROUTER_API_KEY "your_openrouter_api_key_here"
 
 **Note:** After using `setx`, you need to close and reopen your terminal/IDE for the changes to take effect.
 
-### Customizing
+### Virtual Environment Setup
 
-- Modify `src/voice_interview_practice_system/config/agents.yaml` to define your agents
-- Modify `src/voice_interview_practice_system/config/tasks.yaml` to define your tasks
-- Modify `src/voice_interview_practice_system/crew.py` to add your own logic, tools and specific args
-- Modify `src/voice_interview_practice_system/main.py` to add custom inputs for your agents and tasks
+1. Create a virtual environment:
+```powershell
+python -m venv .venv
+```
+
+2. Activate the virtual environment:
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+3. Install dependencies:
+```powershell
+python -m pip install --upgrade pip
+python -m pip install -e .
+python -m pip install playsound==1.2.2
+```
 
 ## Running the Project
 
-To kickstart your crew of AI agents and begin task execution, run this from the root folder of your project:
+### Using PowerShell Script (Recommended)
+
+```powershell
+# Activate virtual environment first
+.\.venv\Scripts\Activate.ps1
+
+# Run the interview system
+.\run_interview.ps1
+```
+
+### Using Python Directly
+
+```powershell
+# Activate virtual environment first
+.\.venv\Scripts\Activate.ps1
+
+# Set PYTHONPATH and run
+$env:PYTHONPATH = "src"
+python -m voice_interview_practice_system.main run
+```
+
+### Using CrewAI CLI
 
 ```bash
 $ crewai run
 ```
 
-This command initializes the voice_interview_practice_system Crew, assembling the agents and assigning them tasks as defined in your configuration.
-
-This example, unmodified, will run the create a `report.md` file with the output of a research on LLMs in the root folder.
-
 ## Understanding Your Crew
 
-The voice_interview_practice_system Crew is composed of multiple AI agents, each with unique roles, goals, and tools. These agents collaborate on a series of tasks, defined in `config/tasks.yaml`, leveraging their collective skills to achieve complex objectives. The `config/agents.yaml` file outlines the capabilities and configurations of each agent in your crew.
+The system uses two AI agents:
+
+1. **Dynamic Interview Conductor**: Conducts the interview, asks questions, and adapts based on your responses
+2. **Interview Performance Coach**: Analyzes your interview performance and provides detailed feedback
+
+All questions and answers are saved in JSON format in the `sessions/` directory for review.
 
 ## Support
 
-For support, questions, or feedback regarding the VoiceInterviewPracticeSystem Crew or crewAI.
+For support, questions, or feedback regarding Ctrl-Hire or crewAI:
 - Visit our [documentation](https://docs.crewai.com)
 - Reach out to us through our [GitHub repository](https://github.com/joaomdmoura/crewai)
 - [Join our Discord](https://discord.com/invite/X4JWnZnxPb)
